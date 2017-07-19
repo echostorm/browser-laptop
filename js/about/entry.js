@@ -1,9 +1,50 @@
+var getFavicon = function () {
+  let favicon
+  const nodeList = document.getElementsByTagName('link')
+  for (var i = 0; i < nodeList.length; i++) {
+    if ((nodeList[i].getAttribute('rel') === 'icon') || (nodeList[i].getAttribute('rel') === 'shortcut icon')) {
+      favicon = nodeList[i].getAttribute('href')
+    }
+  }
+  return favicon
+}
+
+// set favicon as a data url because chrome-extension urls don't work correctly
+if (getFavicon()) {
+  let img = new window.Image()
+  img.onload = function () {
+    let canvas = document.createElement('CANVAS')
+    const ctx = canvas.getContext('2d')
+    canvas.height = this.height
+    canvas.width = this.width
+    ctx.drawImage(this, 0, 0)
+    const dataURL = canvas.toDataURL()
+    const docHead = document.getElementsByTagName('head')[0]
+    const newLink = document.createElement('link')
+    newLink.rel = 'shortcut icon'
+    newLink.href = dataURL
+    docHead.appendChild(newLink)
+    canvas = null
+  }
+  img.src = 'img/favicon.ico'
+}
+
 const ReactDOM = require('react-dom')
 const {getSourceAboutUrl, getBaseUrl} = require('../lib/appUrlUtil')
 const {ABOUT_COMPONENT_INITIALIZED} = require('../constants/messages')
-const ipc = window.chrome.ipc
+const ipc = window.chrome.ipcRenderer
 
 let element
+
+ipc.on('language', (e, detail) => {
+  if (document.l10n) {
+    document.l10n.requestLanguages([detail.langCode])
+    document.getElementsByName('availableLanguages')[0].content = detail.languageCodes.join(', ')
+  } else {
+    console.error('Missing document.l10n object.')
+  }
+})
+ipc.send('request-language')
 
 switch (getBaseUrl(getSourceAboutUrl(window.location.href))) {
   case 'about:about':
@@ -33,20 +74,17 @@ switch (getBaseUrl(getSourceAboutUrl(window.location.href))) {
   case 'about:extensions':
     element = require('./extensions')
     break
-  case 'about:flash':
-    element = require('./flashPlaceholder')
-    break
   case 'about:history':
     element = require('./history')
     break
   case 'about:newtab':
-    element = require('./newtab')
+    element = require('./newtab').AboutNewTab
     break
   case 'about:passwords':
     element = require('./passwords')
     break
   case 'about:preferences':
-    element = require('./preferences')
+    element = require('./preferences').AboutPreferences
     break
   case 'about:safebrowsing':
     element = require('./safebrowsing')
@@ -57,6 +95,9 @@ switch (getBaseUrl(getSourceAboutUrl(window.location.href))) {
   case 'about:contributions':
     element = require('./contributionStatement')
     break
+  case 'about:welcome':
+    element = require('../../app/renderer/about/welcome')
+    break
 }
 
 if (element) {
@@ -66,5 +107,5 @@ if (element) {
       component.setState(detail)
     }
   })
-  ipc.sendToHost(ABOUT_COMPONENT_INITIALIZED)
+  ipc.send(ABOUT_COMPONENT_INITIALIZED)
 }
